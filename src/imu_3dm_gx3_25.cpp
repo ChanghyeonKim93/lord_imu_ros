@@ -10,7 +10,7 @@ io_service(),timeout(io_service)
     topicname_imu_ = "/lord_3dm_gx3_25/imu";
     topicname_mag_ = "/lord_3dm_gx3_25/mag";
     portname_      = "/dev/ttyACM0";
-    baudrate_      = 115200;
+    baudrate_      = 115200; // default baud rate
 
     // Open the serial port
     this->openSerialPort(portname_, baudrate_);
@@ -123,18 +123,7 @@ void IMU_3DM_GX3_25::openSerialPort(const std::string& portname, const int& baud
     boost::asio::read(*serial_, boost::asio::buffer(reply_timer, 7));
 
 
-    // Serial baudrate 
-    // boost::asio::serial_port_base::baud_rate baud_rate_option2(460800);
-    // serial_->set_option(baud_rate_option2);
-    ROS_INFO_STREAM("Serial port is set.");
-};  
-
-
-void IMU_3DM_GX3_25::stream(){
-
-    ROS_WARN("Streaming Data...");
-
-    // setting the serial ..
+    // Serial baudrate to 921600
     UINT_UNION baud_rate_imu;
     baud_rate_imu.uint_ = 921600;
     char set_baudrate[11] = {'\xD9',
@@ -149,15 +138,34 @@ void IMU_3DM_GX3_25::stream(){
     baud_rate_imu.uchar_[2] = reply_baudrate[3];
     baud_rate_imu.uchar_[1] = reply_baudrate[4];
     baud_rate_imu.uchar_[0] = reply_baudrate[5];
-
-    std::cout << " baudrate response: " << baud_rate_imu.uint_ << std::endl;
-
+    // std::cout << " baudrate response: " << baud_rate_imu.uint_ << std::endl;
 
     boost::asio::serial_port_base::baud_rate baud_rate_option2(921600);
     serial_->set_option(baud_rate_option2);
-    boost::asio::serial_port_base::baud_rate baud_rate_option;
-    serial_->get_option(baud_rate_option);
-    std::cout << " baudrate set serialport :" << baud_rate_option.value() << std::endl;
+    boost::asio::serial_port_base::baud_rate baud_rate_option3;
+    serial_->get_option(baud_rate_option3);
+    std::cout << "Baudrate is changed to " << baud_rate_option3.value() << " (for maximizing transmission speed)" << std::endl;
+
+    // Set sampling rate
+    // 500 Hz IMU freq.
+    char data_cond =0;
+    data_cond |= 0x01 | 0x02;
+    char set_samplingrate[20]={'\xDB','\xA8','\xB9','\x01', 
+    '\x00','\x02', 
+    data_cond, '\x00','\x0F','\x11',
+    '\x00','\x01','\x00','\x01','\x00','\x00'};
+    boost::asio::write(*serial_, boost::asio::buffer(set_samplingrate, 20));
+    unsigned char reply_samplingrate[19];
+    boost::asio::read(*serial_, boost::asio::buffer(reply_samplingrate, 19));
+    std::cout << "Sampling rate response : " << (uint32_t)reply_samplingrate[1] <<"," << (uint32_t)reply_samplingrate[2] << std::endl;
+    
+    ROS_INFO_STREAM("Serial port is set.");
+};  
+
+
+void IMU_3DM_GX3_25::stream(){
+
+    ROS_WARN("Streaming Data...");
 
     unsigned short data_length = 79;
     unsigned char  data[data_length];
