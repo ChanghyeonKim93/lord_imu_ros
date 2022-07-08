@@ -51,10 +51,33 @@ private:
 // ROS related 
 private:
     ros::NodeHandle nh_;
+    
     ros::Publisher pub_imu_;
     sensor_msgs::Imu msg_imu_;
     std::string topicname_imu_;
 
+    ros::Publisher pub_mag_;
+    sensor_msgs::MagneticField msg_mag_;
+    std::string topicname_mag_;
+
+    union FLOAT_UNION{
+        float float_;
+        unsigned char uchar_[4];
+    };
+    union INT_UNION{
+        int32_t int_;
+        unsigned char uchar_[4];
+    };
+    union UINT_UNION{
+        uint32_t uint_;
+        unsigned char uchar_[4];
+    };
+
+    FLOAT_UNION acc_[3];
+    FLOAT_UNION gyro_[3];
+    FLOAT_UNION mag_[3];
+    FLOAT_UNION R_[9];
+    INT_UNION   time_;
 };
 
 #endif
