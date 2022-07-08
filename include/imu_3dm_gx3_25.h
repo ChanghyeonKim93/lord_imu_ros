@@ -29,9 +29,8 @@ private:
     bool validateChecksum(const unsigned char* data, unsigned short len);
     void openSerialPort(const std::string& portname, const int& baudrate);
 
-    float extractFloat(unsigned char* addr);
-    int extractInt(unsigned char* addr);
-
+    void setSamplingRate(uint32_t freq);
+    void setBaudRate(uint32_t baudrate);
 
 // Related boost::asio::serial
 private:
@@ -42,6 +41,7 @@ private:
 
     std::string portname_;
     int baudrate_;
+    int imu_rate_;
 
 private:
     char stop[3];

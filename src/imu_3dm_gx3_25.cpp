@@ -9,11 +9,24 @@ io_service(),timeout(io_service)
 
     topicname_imu_ = "/lord_3dm_gx3_25/imu";
     topicname_mag_ = "/lord_3dm_gx3_25/mag";
-    portname_      = "/dev/ttyACM0";
-    baudrate_      = 115200; // default baud rate
 
-    // Open the serial port
-    this->openSerialPort(portname_, baudrate_);
+    // portname_      = "/dev/ttyACM0";
+    // baudrate_      = 115200; // default baud rate
+    // imu_rate_      = 250;
+    if(!ros::param::has("~port"))
+        throw std::runtime_error("IMU_3DM_GX3_25 - no 'port' parameter.");
+    ros::param::get("~port", portname_);
+
+    if(!ros::param::has("~baudrate"))
+        throw std::runtime_error("IMU_3DM_GX3_25 - no 'baudrate' parameter.");
+    ros::param::get("~baudrate", baudrate_);
+
+    if(!ros::param::has("~imu_rate"))
+        throw std::runtime_error("IMU_3DM_GX3_25 - no 'imu_rate' parameter.");
+    ros::param::get("~imu_rate", imu_rate_);
+    
+    // Open the serial port with default baudrate.
+    this->openSerialPort(portname_, 115200);
 
     // Ros publisher
     pub_imu_ = nh_.advertise<sensor_msgs::Imu>(topicname_imu_, 1);
@@ -24,7 +37,6 @@ io_service(),timeout(io_service)
 };
 
 IMU_3DM_GX3_25::~IMU_3DM_GX3_25(){
-
     // Stop continous and close device
     boost::asio::write(*serial_, boost::asio::buffer(stop, 3));
     ROS_WARN("Wait 0.5s"); 
@@ -124,41 +136,12 @@ void IMU_3DM_GX3_25::openSerialPort(const std::string& portname, const int& baud
 
 
     // Serial baudrate to 921600
-    UINT_UNION baud_rate_imu;
-    baud_rate_imu.uint_ = 921600;
-    char set_baudrate[11] = {'\xD9',
-        '\xC3','\x55','\x01','\x01',
-        baud_rate_imu.uchar_[3],baud_rate_imu.uchar_[2],baud_rate_imu.uchar_[1],baud_rate_imu.uchar_[0],
-        '\x00','\x00'};
-    unsigned char reply_baudrate[10];
-    boost::asio::write(*serial_, boost::asio::buffer(set_baudrate, 11));
-    boost::asio::read(*serial_, boost::asio::buffer(reply_baudrate, 10));
-
-    baud_rate_imu.uchar_[3] = reply_baudrate[2];
-    baud_rate_imu.uchar_[2] = reply_baudrate[3];
-    baud_rate_imu.uchar_[1] = reply_baudrate[4];
-    baud_rate_imu.uchar_[0] = reply_baudrate[5];
-    // std::cout << " baudrate response: " << baud_rate_imu.uint_ << std::endl;
-
-    boost::asio::serial_port_base::baud_rate baud_rate_option2(921600);
-    serial_->set_option(baud_rate_option2);
-    boost::asio::serial_port_base::baud_rate baud_rate_option3;
-    serial_->get_option(baud_rate_option3);
-    std::cout << "Baudrate is changed to " << baud_rate_option3.value() << " (for maximizing transmission speed)" << std::endl;
-
+    this->setBaudRate(baudrate_);
+    
     // Set sampling rate
     // 500 Hz IMU freq.
-    char data_cond =0;
-    data_cond |= 0x01 | 0x02;
-    char set_samplingrate[20]={'\xDB','\xA8','\xB9','\x01', 
-    '\x00','\x02', 
-    data_cond, '\x00','\x0F','\x11',
-    '\x00','\x01','\x00','\x01','\x00','\x00'};
-    boost::asio::write(*serial_, boost::asio::buffer(set_samplingrate, 20));
-    unsigned char reply_samplingrate[19];
-    boost::asio::read(*serial_, boost::asio::buffer(reply_samplingrate, 19));
-    std::cout << "Sampling rate response : " << (uint32_t)reply_samplingrate[1] <<"," << (uint32_t)reply_samplingrate[2] << std::endl;
-    
+    this->setSamplingRate(imu_rate_);
+
     ROS_INFO_STREAM("Serial port is set.");
 };  
 
@@ -279,22 +262,80 @@ bool IMU_3DM_GX3_25::validateChecksum(const unsigned char* data, unsigned short 
     return (checksum_calc == checksum_recv);
 }
 
-float IMU_3DM_GX3_25::extractFloat(unsigned char* addr) {
-  float tmp;
-  *((unsigned char*)(&tmp) + 3) = *(addr);
-  *((unsigned char*)(&tmp) + 2) = *(addr+1);
-  *((unsigned char*)(&tmp) + 1) = *(addr+2);
-  *((unsigned char*)(&tmp))     = *(addr+3);
-  return tmp;
-}
 
-int IMU_3DM_GX3_25::extractInt(unsigned char* addr) {
-  int tmp;
-  *((unsigned char*)(&tmp) + 3) = *(addr);
-  *((unsigned char*)(&tmp) + 2) = *(addr+1);
-  *((unsigned char*)(&tmp) + 1) = *(addr+2);
-  *((unsigned char*)(&tmp))     = *(addr+3);
-  return tmp;
-}
+void IMU_3DM_GX3_25::setSamplingRate(uint32_t freq){
+    if(freq != 1000 && freq != 500 && freq != 250 && freq != 200 && freq != 125 && freq != 100 ){
+        throw std::runtime_error("Please set sampling rate within below list:\n 100, 125, 200, 250, 500, 1000.\n 500 Hz can only be supported with baudrate equal or larger than  460800.\n 1000 Hz can only be supported with baudrate equal or larger than 921600.\n");
+    }
+
+    char c_divider[2];
+    if(freq == 1000){
+        c_divider[0] = '\x00';
+        c_divider[1] = '\x01';
+    }
+    else if(freq == 500){
+        c_divider[0] = '\x00';
+        c_divider[1] = '\x02';        
+    }
+    else if(freq == 250){
+        c_divider[0] = '\x00';
+        c_divider[1] = '\x04';        
+    }
+    else if(freq == 200){
+        c_divider[0] = '\x00';
+        c_divider[1] = '\x05';        
+    }
+    else if(freq == 125){
+        c_divider[0] = '\x00';
+        c_divider[1] = '\x08';        
+    }
+    else if(freq == 100){
+        c_divider[0] = '\x00';
+        c_divider[1] = '\x0A';        
+    }
+
+    // Set sampling rate
+    // 500 Hz IMU freq.
+    char data_cond =0;
+    data_cond |= 0x01 | 0x02;
+    char set_samplingrate[20]={'\xDB','\xA8','\xB9','\x01', 
+    c_divider[0], c_divider[1], 
+    data_cond, '\x00','\x0F','\x11',
+    '\x00','\x01','\x00','\x01','\x00','\x00'};
+    boost::asio::write(*serial_, boost::asio::buffer(set_samplingrate, 20));
+    unsigned char reply_samplingrate[19];
+    boost::asio::read(*serial_, boost::asio::buffer(reply_samplingrate, 19));
+    std::cout << "Default sampling rate: " << 250 << " Hz, Query sampling rate: " << freq << " Hz\n";
+    std::cout << "Sampling rate response from IMU: " << 1000/((uint32_t)reply_samplingrate[2]) << " Hz" << std::endl;
+};
 
 
+void IMU_3DM_GX3_25::setBaudRate(uint32_t baudrate){
+    if(baudrate != 460800 && baudrate != 921600 ){
+        throw std::runtime_error("Please set baudrate to 460800 or 921600. If your machine cannot support 921600, set 460800.\n");
+    }
+
+    // Serial baudrate to 921600
+    UINT_UNION baud_rate_imu;
+    baud_rate_imu.uint_ = baudrate;
+    char set_baudrate[11] = {'\xD9',
+        '\xC3','\x55','\x01','\x01',
+        baud_rate_imu.uchar_[3],baud_rate_imu.uchar_[2],baud_rate_imu.uchar_[1],baud_rate_imu.uchar_[0],
+        '\x00','\x00'};
+    unsigned char reply_baudrate[10];
+    boost::asio::write(*serial_, boost::asio::buffer(set_baudrate, 11));
+    boost::asio::read(*serial_, boost::asio::buffer(reply_baudrate, 10));
+
+    baud_rate_imu.uchar_[3] = reply_baudrate[2];
+    baud_rate_imu.uchar_[2] = reply_baudrate[3];
+    baud_rate_imu.uchar_[1] = reply_baudrate[4];
+    baud_rate_imu.uchar_[0] = reply_baudrate[5];
+    // std::cout << " baudrate response: " << baud_rate_imu.uint_ << std::endl;
+
+    boost::asio::serial_port_base::baud_rate baud_rate_option2(921600);
+    serial_->set_option(baud_rate_option2);
+    boost::asio::serial_port_base::baud_rate baud_rate_option3;
+    serial_->get_option(baud_rate_option3);
+    std::cout << "Baudrate is changed from 115200 (default) to " << baud_rate_option3.value() << std::endl;
+
+};

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5.1)
-project(lord_microstrain_3dm-gx3-25_ros)
+project(lord_imu_ros)
 
 set(CMAKE_BUILD_TYPE Release) # Release, RelWithDebInfo
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pg -O2")
@@ -42,5 +42,5 @@ include_directories( ${catkin_INCLUDE_DIRS} )
 include_directories( ${Eigen_INCLUDE_DIRS} )
 
 # executables
-add_executable(microstrain_3dm_gx3_25_node src/main.cpp ${SRC})
-target_link_libraries (microstrain_3dm_gx3_25_node ${catkin_LIBRARIES} ${Eigen_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_REGEX_LIBRARY})
+add_executable(lord_3dm_gx3_25_node src/main.cpp ${SRC})
+target_link_libraries (lord_3dm_gx3_25_node ${catkin_LIBRARIES} ${Eigen_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_REGEX_LIBRARY})

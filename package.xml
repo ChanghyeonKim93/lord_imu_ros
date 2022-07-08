@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>lord_microstrain_3dm-gx3-25_ros</name>
+  <name>lord_imu_ros</name>
   <version>0.0.0</version>
-  <description>lord_microstrain_3dm-gx3-25_ros package</description>
+  <description>lord_imu_ros package</description>
 
   <maintainer email="Changhyeon@gmail.com">ChanghyeonKim</maintainer>
 

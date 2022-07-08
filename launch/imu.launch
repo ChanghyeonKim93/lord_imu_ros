@@ -1,0 +1,16 @@
+<launch>
+    <arg name="output" default="screen"/>
+    <arg name="imu" default="lord_3dm_gx3_25"/>
+
+    <arg name="port" default="/dev/lord_3dm_gx3_25" />
+    <arg name="frame_id" default="$(arg imu)"/>
+    <arg name="baudrate" default="921600"/>
+    <arg name="imu_rate" default="500"/> <!-- 100, 125, 250, 400, 500, 1000 -->
+
+    <node pkg="lord_imu_ros" name="lord_3dm_gx3_25_node" type="lord_3dm_gx3_25_node" output="$(arg output)">
+        <param name="port" type="string" value="$(arg port)"/>
+        <param name="baudrate" type="int" value="$(arg baudrate)"/>
+        <param name="frame_id" type="string" value="$(arg frame_id)"/>
+        <param name="imu_rate" type="int" value="$(arg imu_rate)"/>
+         </node>
+</launch>
