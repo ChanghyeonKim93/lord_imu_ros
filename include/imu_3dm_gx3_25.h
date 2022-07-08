@@ -36,6 +36,10 @@ private:
 // Related boost::asio::serial
 private:
     boost::asio::serial_port* serial_;
+
+    boost::asio::io_service io_service;
+    boost::asio::deadline_timer timeout;
+
     std::string portname_;
     int baudrate_;
 

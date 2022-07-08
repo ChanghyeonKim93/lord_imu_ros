@@ -1,8 +1,33 @@
 #include "imu_3dm_gx3_25.h"
 
 
+void callbackRead(bool& data_available, boost::asio::deadline_timer& timeout, const boost::system::error_code& error, std::size_t bytes_transferred)
+{
+    if (error || !bytes_transferred) {
+        data_available = false; // No data was read!
+        return;
+    }
+    timeout.cancel();  // will cause wait_callback to fire with an error
+    data_available = true; 
+}
+
+void callbackWait(boost::asio::serial_port& serial_port, const boost::system::error_code& error)
+{
+  if (error) {
+    // Data was read and this timeout was canceled
+    std::cout << " callbackWait - error:" << error <<std::endl;
+    return;
+  }
+
+  serial_port.cancel();  // will cause read_callback to fire with an error
+}
+
+
+
 IMU_3DM_GX3_25::IMU_3DM_GX3_25(ros::NodeHandle& nh)
-: nh_(nh), stop({'\xFA','\x75','\xB4'}), mode({'\xD4','\xA3','\x47','\x00'}){
+: nh_(nh), stop({'\xFA','\x75','\xB4'}), mode({'\xD4','\xA3','\x47','\x00'}),
+io_service(),timeout(io_service)
+{
 
     ROS_INFO_STREAM("IMU_3DM_GX3_25 - starts");
 
@@ -36,7 +61,7 @@ void IMU_3DM_GX3_25::openSerialPort(const std::string& portname, const int& baud
 
     // Generate serial port.
     serial_ = nullptr;
-    boost::asio::io_service io_service;
+    
     serial_ = new boost::asio::serial_port(io_service);
 
     // Try to open the serial port
@@ -66,6 +91,20 @@ void IMU_3DM_GX3_25::openSerialPort(const std::string& portname, const int& baud
     serial_->set_option(stop_bits);
 
 
+    bool data_available = false;
+    unsigned char  my_buffer[1];
+    serial_->async_read_some(boost::asio::buffer(my_buffer),
+        boost::bind(&callbackRead, boost::ref(data_available), boost::ref(timeout),
+                    boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+    timeout.expires_from_now(boost::posix_time::milliseconds(1));
+    timeout.async_wait(boost::bind(&callbackWait, boost::ref(*serial_), boost::asio::placeholders::error));
+
+    io_service.run();  // will block until async callbacks are finished
+
+    if (!data_available)
+    {
+        std::cout << "sisisi \n";
+    }
     // From this, we set the IMU settings
     bool flag_retry = false;
 
@@ -130,65 +169,81 @@ void IMU_3DM_GX3_25::stream(){
     unsigned short data_length = 79;
     unsigned char  data[data_length];
 
+    
     ros::Time t0 = ros::Time::now();  
 
+    ros::Rate rate(1000);
+
     while (ros::ok()) {
-        int len_read = serial_->read_some(boost::asio::buffer(data, data_length));
-        if (len_read == -1) {
+        int len_read = 0;
+        try {
+            len_read = serial_->read_some(boost::asio::buffer(data, data_length));
+        }
+        catch (std::exception& e) {
             if (errno == EINTR) continue;
         }
-        std::cout << "len read : " << len_read << std::endl;
+
+        if (len_read == -1) continue;
+
         if (!validateChecksum(data, data_length)) {
             ROS_ERROR("%s: checksum failed on message", portname_.c_str());
             continue;
         }
 
+        if(len_read > 0){
+            if (!validateChecksum(data, data_length)) {
+                ROS_ERROR("%s: checksum failed on message", portname_.c_str());
+                continue;
+            }
+
+            unsigned int k = 1;
+            float acc[3];
+            float ang_vel[3];
+            float mag[3];
+            float M[9];
+            double T;
+            for (uint8_t i = 0; i < 3; i++, k += 4) acc[i]     = extractFloat(&(data[k]));
+            for (uint8_t i = 0; i < 3; i++, k += 4) ang_vel[i] = extractFloat(&(data[k]));
+            for (uint8_t i = 0; i < 3; i++, k += 4) mag[i]     = extractFloat(&(data[k]));
+            for (uint8_t i = 0; i < 9; i++, k += 4) M[i]       = extractFloat(&(data[k]));
+            T = extractInt(&(data[k])) / 62500.0;
+
+            std::cout << " ACC: ";
+            for(int i = 0; i < 3; ++i) std::cout << acc[i] <<" ";
+            std::cout << std::endl;
+            std::cout << "GYRO: ";
+            for(int i = 0; i < 3; ++i) std::cout << ang_vel[i] <<" ";
+            std::cout << std::endl;
+
+            double delay = 0.0;
+            msg_imu_.header.stamp    = t0 + ros::Duration(T) - ros::Duration(delay);
+            msg_imu_.header.frame_id = "body";
+            msg_imu_.angular_velocity.x    = ang_vel[0];
+            msg_imu_.angular_velocity.y    = ang_vel[1];
+            msg_imu_.angular_velocity.z    = ang_vel[2];
+            msg_imu_.linear_acceleration.x = acc[0] * 9.81;
+            msg_imu_.linear_acceleration.y = acc[1] * 9.81;
+            msg_imu_.linear_acceleration.z = acc[2] * 9.81;
 
 
-        unsigned int k = 1;
-        float acc[3];
-        float ang_vel[3];
-        float mag[3];
-        float M[9];
-        double T;
-        for (uint8_t i = 0; i < 3; i++, k += 4) acc[i]     = extractFloat(&(data[k]));
-        for (uint8_t i = 0; i < 3; i++, k += 4) ang_vel[i] = extractFloat(&(data[k]));
-        for (uint8_t i = 0; i < 3; i++, k += 4) mag[i]     = extractFloat(&(data[k]));
-        for (uint8_t i = 0; i < 9; i++, k += 4) M[i]       = extractFloat(&(data[k]));
-        T = extractInt(&(data[k])) / 62500.0;
+            Eigen::Matrix3d R;
+            for (unsigned int i = 0; i < 3; i++)
+                for (unsigned int j = 0; j < 3; j++)
+                R(i,j) = M[j*3+i];
+                
+            Eigen::Quaternion<double> q(R);
+            msg_imu_.orientation.w = (double)q.w();// q(0);
+            msg_imu_.orientation.x = (double)q.x();// q(1);
+            msg_imu_.orientation.y = (double)q.y();// q(2);
+            msg_imu_.orientation.z = (double)q.z();// q(3);
+            msg_imu_.orientation_covariance[0] = mag[0];
+            msg_imu_.orientation_covariance[1] = mag[1];
+            msg_imu_.orientation_covariance[2] = mag[2];
+            pub_imu_.publish(msg_imu_);
+        }
 
-        std::cout << " ACC: ";
-        for(int i = 0; i < 3; ++i) std::cout << acc[i] <<" ";
-        std::cout << std::endl;
-        std::cout << "GYRO: ";
-        for(int i = 0; i < 3; ++i) std::cout << ang_vel[i] <<" ";
-        std::cout << std::endl;
-
-        double delay = 0.0;
-        msg_imu_.header.stamp    = t0 + ros::Duration(T) - ros::Duration(delay);
-        msg_imu_.header.frame_id = "body";
-        msg_imu_.angular_velocity.x    = ang_vel[0];
-        msg_imu_.angular_velocity.y    = ang_vel[1];
-        msg_imu_.angular_velocity.z    = ang_vel[2];
-        msg_imu_.linear_acceleration.x = acc[0] * 9.81;
-        msg_imu_.linear_acceleration.y = acc[1] * 9.81;
-        msg_imu_.linear_acceleration.z = acc[2] * 9.81;
-
-
-        Eigen::Matrix3d R;
-        for (unsigned int i = 0; i < 3; i++)
-            for (unsigned int j = 0; j < 3; j++)
-            R(i,j) = M[j*3+i];
-            
-        Eigen::Quaternion<double> q(R);
-        msg_imu_.orientation.w = (double)q.w();// q(0);
-        msg_imu_.orientation.x = (double)q.x();// q(1);
-        msg_imu_.orientation.y = (double)q.y();// q(2);
-        msg_imu_.orientation.z = (double)q.z();// q(3);
-        msg_imu_.orientation_covariance[0] = mag[0];
-        msg_imu_.orientation_covariance[1] = mag[1];
-        msg_imu_.orientation_covariance[2] = mag[2];
-        pub_imu_.publish(msg_imu_);
+        ros::spinOnce();
+        rate.sleep();
     }
 };
 
@@ -233,3 +288,5 @@ int IMU_3DM_GX3_25::extractInt(unsigned char* addr) {
 
   return tmp;
 }
+
+
