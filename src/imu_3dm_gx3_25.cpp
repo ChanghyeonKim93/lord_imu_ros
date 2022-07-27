@@ -207,7 +207,8 @@ void IMU_3DM_GX3_25::stream(){
             R_[8].uchar_[3] = *(++ptr); R_[8].uchar_[2] = *(++ptr); R_[8].uchar_[1] = *(++ptr); R_[8].uchar_[0] = *(++ptr);  
 
             double delay = 0.0;
-            msg_imu_.header.stamp    = t0 + ros::Duration(timestamp_from_imu) - ros::Duration(delay);
+            // msg_imu_.header.stamp    = t0 + ros::Duration(timestamp_from_imu) - ros::Duration(delay);
+            msg_imu_.header.stamp    = ros::Time::now();
             msg_imu_.header.frame_id = "body";
             msg_imu_.angular_velocity.x    = gyro_[0].float_;
             msg_imu_.angular_velocity.y    = gyro_[1].float_;
