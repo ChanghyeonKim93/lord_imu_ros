@@ -15,7 +15,10 @@
 
 #include <Eigen/Dense>
 
+#include "util/ros_print_in_color.h"
+
 #define REPLY_LENGTH 4
+#define GRAVITY_MAGNITUDE 9.81
 
 class IMU_3DM_GX3_25{
 public:

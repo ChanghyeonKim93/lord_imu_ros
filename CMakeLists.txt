@@ -31,7 +31,9 @@ catkin_package(
 
 set(SRC ${SRC} 
     src/imu_3dm_gx3_25.cpp
-    src/signal_handler_linux.cpp
+    
+    src/util/signal_handler_linux.cpp
+    src/util/ros_print_in_color.cpp
 )
 
 set(includeDirs ${includeDirs} ${CMAKE_CURRENT_BINARY_DIR})

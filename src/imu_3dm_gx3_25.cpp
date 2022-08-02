@@ -59,15 +59,16 @@ void IMU_3DM_GX3_25::openSerialPort(const std::string& portname, const int& baud
       serial_->open(portname);
     }
     catch (boost::system::system_error& error){
-        std::cout << "Port [" << portname.c_str() << "] is not opened. Error message:" << error.what() << std::endl;
+        ROS_ERROR_STREAM("Port [" << portname.c_str() << "] is not opened. Error message:" << error.what() );
         throw std::runtime_error(error.what());
     }
 
     // If serial port cannot be opened, 
     if ( !serial_->is_open() ) {
-      std::cout << "[" << portname <<"] is not opened. terminate the node\n";
+      ROS_ERROR_STREAM("[" << portname <<"] is not opened. terminate the node.");
       throw std::runtime_error("");
     }
+    ROS_GREEN_STREAM("Serial port [" << portname <<"] is successfully opened.");
 
     // Set serial port spec.
     boost::asio::serial_port_base::baud_rate baud_rate_option(baudrate);
@@ -142,13 +143,13 @@ void IMU_3DM_GX3_25::openSerialPort(const std::string& portname, const int& baud
     // 500 Hz IMU freq.
     this->setSamplingRate(imu_rate_);
 
-    ROS_INFO_STREAM("Serial port is set.");
+    ROS_GREEN_STREAM("Serial port is initialized.");
 };  
 
 
 void IMU_3DM_GX3_25::stream(){
 
-    ROS_WARN("Streaming Data...");
+    ROS_GREEN_STREAM("Streaming Data...");
 
     unsigned short data_length = 79;
     unsigned char  data[data_length];
@@ -213,9 +214,9 @@ void IMU_3DM_GX3_25::stream(){
             msg_imu_.angular_velocity.x    = gyro_[0].float_;
             msg_imu_.angular_velocity.y    = gyro_[1].float_;
             msg_imu_.angular_velocity.z    = gyro_[2].float_;
-            msg_imu_.linear_acceleration.x = acc_[0].float_ * 9.81;
-            msg_imu_.linear_acceleration.y = acc_[1].float_ * 9.81;
-            msg_imu_.linear_acceleration.z = acc_[2].float_ * 9.81;
+            msg_imu_.linear_acceleration.x = acc_[0].float_ * GRAVITY_MAGNITUDE;
+            msg_imu_.linear_acceleration.y = acc_[1].float_ * GRAVITY_MAGNITUDE;
+            msg_imu_.linear_acceleration.z = acc_[2].float_ * GRAVITY_MAGNITUDE;
 
 
             Eigen::Matrix3d R;

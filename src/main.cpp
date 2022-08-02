@@ -5,7 +5,7 @@
 #include <ros/ros.h>
 
 #include "imu_3dm_gx3_25.h"
-#include "signal_handler_linux.h"
+#include "util/signal_handler_linux.h"
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "lord_3dm_gx3_25_node");
